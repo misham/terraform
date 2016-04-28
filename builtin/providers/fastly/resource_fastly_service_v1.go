@@ -55,6 +55,35 @@ func resourceServiceV1() *schema.Resource {
 				},
 			},
 
+			"condition": &schema.Schema{
+				Type:     schema.TypeSet,
+				Required: true,
+				Elem: &schema.Resource{
+					Schema: map[string]*schema.Schema{
+						"name": &schema.Schema{
+							Type:     schema.TypeString,
+							Required: true,
+						},
+						"statement": &schema.Schema{
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: "The statement used to determine if the condition is met",
+						},
+						"priority": &schema.Schema{
+							Type:        schema.TypeInt,
+							Optional:    true,
+							Default:     10,
+							Description: "A number used to determine the order in which multiple conditions execute. Lower numbers execute first",
+						},
+						"type": &schema.Schema{
+							Type:        schema.TypeString,
+							Required:    true,
+							Description: " Type of the condition, either `REQUEST`, `RESPONSE`, or `CACHE`",
+						},
+					},
+				},
+			},
+
 			"default_ttl": &schema.Schema{
 				Type:        schema.TypeInt,
 				Optional:    true,
