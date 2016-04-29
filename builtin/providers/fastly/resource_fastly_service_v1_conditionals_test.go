@@ -3,6 +3,7 @@ package fastly
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"testing"
 
 	"github.com/hashicorp/terraform/helper/acctest"
@@ -16,6 +17,13 @@ func TestAccFastlyServiceV1_conditional_basic(t *testing.T) {
 	name := fmt.Sprintf("tf-test-%s", acctest.RandString(10))
 	domainName1 := fmt.Sprintf("%s.notadomain.com", acctest.RandString(10))
 
+	con1 := gofastly.Condition{
+		Name:      "some amz condition",
+		Priority:  10,
+		Type:      "REQUEST",
+		Statement: `req.url ~ "^/yolo/"`,
+	}
+
 	resource.Test(t, resource.TestCase{
 		PreCheck:     func() { testAccPreCheck(t) },
 		Providers:    testAccProviders,
@@ -25,7 +33,7 @@ func TestAccFastlyServiceV1_conditional_basic(t *testing.T) {
 				Config: testAccServiceV1ConditionConfig(name, domainName1),
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckServiceV1Exists("fastly_service_v1.foo", &service),
-					testAccCheckFastlyServiceV1ConditionalAttributes(&service, name),
+					testAccCheckFastlyServiceV1ConditionalAttributes(&service, name, []*gofastly.Condition{&con1}),
 					resource.TestCheckResourceAttr(
 						"fastly_service_v1.foo", "name", name),
 					resource.TestCheckResourceAttr(
@@ -36,7 +44,7 @@ func TestAccFastlyServiceV1_conditional_basic(t *testing.T) {
 	})
 }
 
-func testAccCheckFastlyServiceV1ConditionalAttributes(service *gofastly.ServiceDetail, name string) resource.TestCheckFunc {
+func testAccCheckFastlyServiceV1ConditionalAttributes(service *gofastly.ServiceDetail, name string, conditions []*gofastly.Condition) resource.TestCheckFunc {
 	return func(s *terraform.State) error {
 
 		if service.Name != name {
@@ -55,29 +63,30 @@ func testAccCheckFastlyServiceV1ConditionalAttributes(service *gofastly.ServiceD
 
 		log.Printf("\n@@@\nFound conditions: %#v\n@@@\n", conditionList)
 
-		// var deleted []string
-		// var added []string
-		// for _, h := range headersList {
-		// 	if h.Action == gofastly.HeaderActionDelete {
-		// 		deleted = append(deleted, h.Destination)
-		// 	}
-		// 	if h.Action == gofastly.HeaderActionSet {
-		// 		added = append(added, h.Destination)
-		// 	}
-		// }
+		if len(conditionList) != len(conditions) {
+			return fmt.Errorf("Error: mis match count of conditions, expected (%d), got (%d)", len(conditions), len(conditionList))
+		}
 
-		// sort.Strings(headersAdded)
-		// sort.Strings(headersDeleted)
-		// sort.Strings(deleted)
-		// sort.Strings(added)
+		var found int
+		for _, c := range conditions {
+			for _, lc := range conditionList {
+				log.Printf("\n***Condition:\n\tname: %s\n\tstatement: %s\n\tpriority: %d\n\ttype: %s\n***\n", lc.Name, lc.Statement, lc.Priority, lc.Type)
 
-		// if !reflect.DeepEqual(headersDeleted, deleted) {
-		// 	return fmt.Errorf("Deleted Headers did not match.\n\tExpected: (%#v)\n\tGot: (%#v)", headersDeleted, deleted)
-		// }
-		// if !reflect.DeepEqual(headersAdded, added) {
-		// 	return fmt.Errorf("Added Headers did not match.\n\tExpected: (%#v)\n\tGot: (%#v)", headersAdded, added)
-		// }
+				if c.Name == lc.Name {
+					// we don't know these things ahead of time, so populate them now
+					c.ServiceID = service.ID
+					c.Version = service.ActiveVersion.Number
+					if !reflect.DeepEqual(c, lc) {
+						return fmt.Errorf("Bad match Conditions match, expected (%#v), got (%#v)", c, lc)
+					}
+					found++
+				}
+			}
+		}
 
+		if found != len(conditions) {
+			return fmt.Errorf("Error matching Conditions rules")
+		}
 		return nil
 	}
 }

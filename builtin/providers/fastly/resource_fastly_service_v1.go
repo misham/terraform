@@ -68,17 +68,22 @@ func resourceServiceV1() *schema.Resource {
 							Type:        schema.TypeString,
 							Required:    true,
 							Description: "The statement used to determine if the condition is met",
+							// StateFunc: func(v interface{}) string {
+							// 	value := v.(string)
+							// 	log.Printf("\n***\n string: %s", value)
+							// 	log.Printf("\n***\n new string: %s\n***\n", strings.TrimSpace(value))
+							// 	return strings.TrimSpace(value)
+							// },
 						},
 						"priority": &schema.Schema{
 							Type:        schema.TypeInt,
-							Optional:    true,
-							Default:     10,
+							Required:    true,
 							Description: "A number used to determine the order in which multiple conditions execute. Lower numbers execute first",
 						},
 						"type": &schema.Schema{
 							Type:        schema.TypeString,
 							Required:    true,
-							Description: " Type of the condition, either `REQUEST`, `RESPONSE`, or `CACHE`",
+							Description: "Type of the condition, either `REQUEST`, `RESPONSE`, or `CACHE`",
 						},
 					},
 				},
@@ -438,6 +443,7 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 		"header",
 		"gzip",
 		"s3logging",
+		"condition",
 	} {
 		if d.HasChange(v) {
 			needsChange = true
@@ -489,6 +495,70 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 			_, err := conn.UpdateSettings(&opts)
 			if err != nil {
 				return err
+			}
+		}
+
+		// Conditions need to be updated first, as they can be referenced by other
+		// configuraiton objects (Backends, Request Headers, etc)
+
+		// Find difference in Conditions
+		if d.HasChange("condition") {
+			// POST new Conditions
+			// Note: we don't utilize the PUT endpoint to update a Backend, we simply
+			// destroy it and create a new one. This is how Terraform works with nested
+			// sub resources, we only get the full diff not a partial set item diff.
+			// Because this is done on a new version of the configuration, this is
+			// considered safe
+			oc, nc := d.GetChange("condition")
+			if oc == nil {
+				oc = new(schema.Set)
+			}
+			if nc == nil {
+				nc = new(schema.Set)
+			}
+
+			ocs := oc.(*schema.Set)
+			ncs := nc.(*schema.Set)
+			removeConditions := ocs.Difference(ncs).List()
+			addConditions := ncs.Difference(ocs).List()
+
+			// DELETE old Conditions
+			for _, cRaw := range removeConditions {
+				cf := cRaw.(map[string]interface{})
+				opts := gofastly.DeleteConditionInput{
+					Service: d.Id(),
+					Version: latestVersion,
+					Name:    cf["name"].(string),
+				}
+
+				log.Printf("[DEBUG] Fastly Conditions Removal opts: %#v", opts)
+				err := conn.DeleteCondition(&opts)
+				if err != nil {
+					return err
+				}
+			}
+
+			for _, cRaw := range addConditions {
+				cf := cRaw.(map[string]interface{})
+				log.Printf("\n***\nStatement:\n%s\n***\n", cf["statement"].(string))
+				log.Printf("\n***\nStatement trimmed:\n%s\n***\n", strings.TrimSpace(cf["statement"].(string)))
+				opts := gofastly.CreateConditionInput{
+					Service: d.Id(),
+					Version: latestVersion,
+					Name:    cf["name"].(string),
+					Type:    cf["type"].(string),
+					// need to trim leading/tailing spaces, incase the config has HEREDOC
+					// formatting and contains a trailing new line
+					//Statement: strings.TrimSpace(cf["statement"].(string)),
+					Statement: cf["statement"].(string),
+					Priority:  cf["priority"].(int),
+				}
+
+				log.Printf("[DEBUG] Create Conditions Opts: %#v", opts)
+				_, err := conn.CreateCondition(&opts)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -976,6 +1046,23 @@ func resourceServiceV1Read(d *schema.ResourceData, meta interface{}) error {
 			log.Printf("[WARN] Error setting S3 Logging for (%s): %s", d.Id(), err)
 		}
 
+		// refresh Conditions
+		log.Printf("[DEBUG] Refreshing Conditions for (%s)", d.Id())
+		conditionList, err := conn.ListConditions(&gofastly.ListConditionsInput{
+			Service: d.Id(),
+			Version: s.ActiveVersion.Number,
+		})
+
+		if err != nil {
+			return fmt.Errorf("[ERR] Error looking up Conditions for (%s), version (%s): %s", d.Id(), s.ActiveVersion.Number, err)
+		}
+
+		cl := flattenConditions(conditionList)
+
+		if err := d.Set("condition", cl); err != nil {
+			log.Printf("[WARN] Error setting Conditions for (%s): %s", d.Id(), err)
+		}
+
 	} else {
 		log.Printf("[DEBUG] Active Version for Service (%s) is empty, no state to refresh", d.Id())
 	}
@@ -1243,4 +1330,30 @@ func flattenS3s(s3List []*gofastly.S3) []map[string]interface{} {
 	}
 
 	return sl
+}
+
+func flattenConditions(conditionList []*gofastly.Condition) []map[string]interface{} {
+	var cl []map[string]interface{}
+	for _, c := range conditionList {
+		// Convert Conditions to a map for saving to state.
+		log.Printf("\n@@@\nRaw conditional: %#v\n@@@\n", c)
+		nc := map[string]interface{}{
+			"name":      c.Name,
+			"statement": c.Statement,
+			"type":      c.Type,
+			"priority":  c.Priority,
+		}
+
+		// prune any empty values that come from the default string value in structs
+		for k, v := range nc {
+			if v == "" {
+				delete(nc, k)
+			}
+		}
+		log.Printf("\n@@@\nRaw conditional map: %#v\n@@@\n", nc)
+
+		cl = append(cl, nc)
+	}
+
+	return cl
 }
