@@ -44,6 +44,14 @@ type MockResourceProvider struct {
 	RefreshReturnError           error
 	ResourcesCalled              bool
 	ResourcesReturn              []ResourceType
+	ReadDataCalled               bool
+	ReadDataInfo                 *InstanceInfo
+	ReadDataConfig               *ResourceConfig
+	ReadDataFn                   func(*InstanceInfo, *ResourceConfig) (*InstanceState, error)
+	ReadDataReturn               *InstanceState
+	ReadDataReturnError          error
+	DataSourcesCalled            bool
+	DataSourcesReturn            []DataSource
 	ValidateCalled               bool
 	ValidateConfig               *ResourceConfig
 	ValidateFn                   func(*ResourceConfig) ([]string, []error)
@@ -174,4 +182,29 @@ func (p *MockResourceProvider) Resources() []ResourceType {
 
 	p.ResourcesCalled = true
 	return p.ResourcesReturn
+}
+
+func (p *MockResourceProvider) ReadData(
+	info *InstanceInfo,
+	c *ResourceConfig) (*InstanceState, error) {
+	p.Lock()
+	defer p.Unlock()
+
+	p.ReadDataCalled = true
+	p.ReadDataInfo = info
+	p.ReadDataConfig = c
+
+	if p.ReadDataFn != nil {
+		return p.ReadDataFn(info, c)
+	}
+
+	return p.ReadDataReturn, p.ReadDataReturnError
+}
+
+func (p *MockResourceProvider) DataSources() []DataSource {
+	p.Lock()
+	defer p.Unlock()
+
+	p.DataSourcesCalled = true
+	return p.DataSourcesReturn
 }

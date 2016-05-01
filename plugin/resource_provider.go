@@ -188,6 +188,38 @@ func (p *ResourceProvider) Resources() []terraform.ResourceType {
 	return result
 }
 
+func (p *ResourceProvider) ReadData(
+	info *terraform.InstanceInfo,
+	c *terraform.ResourceConfig) (*terraform.InstanceState, error) {
+	var resp ResourceProviderReadDataResponse
+	args := &ResourceProviderReadDataArgs{
+		Info:   info,
+		Config: c,
+	}
+
+	err := p.Client.Call("Plugin.ReadData", args, &resp)
+	if err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		err = resp.Error
+	}
+
+	return resp.State, err
+}
+
+func (p *ResourceProvider) DataSources() []terraform.DataSource {
+	var result []terraform.DataSource
+
+	err := p.Client.Call("Plugin.DataSources", new(interface{}), &result)
+	if err != nil {
+		// TODO: panic, log, what?
+		return nil
+	}
+
+	return result
+}
+
 func (p *ResourceProvider) Close() error {
 	return p.Client.Close()
 }
@@ -241,6 +273,16 @@ type ResourceProviderRefreshArgs struct {
 }
 
 type ResourceProviderRefreshResponse struct {
+	State *terraform.InstanceState
+	Error *plugin.BasicError
+}
+
+type ResourceProviderReadDataArgs struct {
+	Info   *terraform.InstanceInfo
+	Config *terraform.ResourceConfig
+}
+
+type ResourceProviderReadDataResponse struct {
 	State *terraform.InstanceState
 	Error *plugin.BasicError
 }
@@ -365,5 +407,23 @@ func (s *ResourceProviderServer) Resources(
 	nothing interface{},
 	result *[]terraform.ResourceType) error {
 	*result = s.Provider.Resources()
+	return nil
+}
+
+func (s *ResourceProviderServer) ReadData(
+	args *ResourceProviderReadDataArgs,
+	result *ResourceProviderReadDataResponse) error {
+	newState, err := s.Provider.ReadData(args.Info, args.Config)
+	*result = ResourceProviderReadDataResponse{
+		State: newState,
+		Error: plugin.NewBasicError(err),
+	}
+	return nil
+}
+
+func (s *ResourceProviderServer) DataSources(
+	nothing interface{},
+	result *[]terraform.DataSource) error {
+	*result = s.Provider.DataSources()
 	return nil
 }

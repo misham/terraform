@@ -204,3 +204,16 @@ func (p *Provider) Resources() []terraform.ResourceType {
 
 	return result
 }
+
+// ReadData implementation of terraform.ResourceProvider interface.
+func (p *Provider) ReadData(
+	info *terraform.InstanceInfo,
+	c *terraform.ResourceConfig) (*terraform.InstanceState, error) {
+
+	return nil, fmt.Errorf("ReadData not yet implemented")
+}
+
+// DataSources implementation of terraform.ResourceProvider interface.
+func (p *Provider) DataSources() []terraform.DataSource {
+	return []terraform.DataSource{}
+}
