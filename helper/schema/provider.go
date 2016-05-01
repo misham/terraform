@@ -225,7 +225,19 @@ func (p *Provider) Resources() []terraform.ResourceType {
 	return result
 }
 
-// ReadData implementation of terraform.ResourceProvider interface.
+// ValidateDataSource implementation of terraform.ResourceProvider interface.
+func (p *Provider) ValidateDataSource(
+	t string, c *terraform.ResourceConfig) ([]string, []error) {
+	r, ok := p.DataSourcesMap[t]
+	if !ok {
+		return nil, []error{fmt.Errorf(
+			"Provider doesn't support data source: %s", t)}
+	}
+
+	return r.Validate(c)
+}
+
+// RefreshData implementation of terraform.ResourceProvider interface.
 func (p *Provider) ReadData(
 	info *terraform.InstanceInfo,
 	c *terraform.ResourceConfig) (*terraform.InstanceState, error) {

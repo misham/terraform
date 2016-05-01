@@ -660,6 +660,44 @@ func TestResourceProvider_validateResource_warns(t *testing.T) {
 	}
 }
 
+func TestResourceProvider_validateDataSource(t *testing.T) {
+	p := new(terraform.MockResourceProvider)
+
+	// Create a mock provider
+	client, _ := plugin.TestPluginRPCConn(t, pluginMap(&ServeOpts{
+		ProviderFunc: testProviderFixed(p),
+	}))
+	defer client.Close()
+
+	// Request the provider
+	raw, err := client.Dispense(ProviderPluginName)
+	if err != nil {
+		t.Fatalf("err: %s", err)
+	}
+	provider := raw.(terraform.ResourceProvider)
+
+	// Configure
+	config := &terraform.ResourceConfig{
+		Raw: map[string]interface{}{"foo": "bar"},
+	}
+	w, e := provider.ValidateDataSource("foo", config)
+	if !p.ValidateDataSourceCalled {
+		t.Fatal("configure should be called")
+	}
+	if p.ValidateDataSourceType != "foo" {
+		t.Fatalf("bad: %#v", p.ValidateDataSourceType)
+	}
+	if !reflect.DeepEqual(p.ValidateDataSourceConfig, config) {
+		t.Fatalf("bad: %#v", p.ValidateDataSourceConfig)
+	}
+	if w != nil {
+		t.Fatalf("bad: %#v", w)
+	}
+	if e != nil {
+		t.Fatalf("bad: %#v", e)
+	}
+}
+
 func TestResourceProvider_close(t *testing.T) {
 	p := new(terraform.MockResourceProvider)
 
