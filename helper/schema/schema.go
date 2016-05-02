@@ -284,6 +284,21 @@ func (m schemaMap) Data(
 	}, nil
 }
 
+// ConfigData returns a ResourceData for the given config, which
+// is assumed to have already been completely interpolated.
+func (m schemaMap) ConfigData(c *terraform.ResourceConfig) (*ResourceData, error) {
+	d := &ResourceData{
+		schema: m,
+		config: c,
+	}
+
+	// Initialize the "set" values from what's already present in the config,
+	// so values will come back from Get as expected.
+	d.setAllFrom(getSourceConfig)
+
+	return d, nil
+}
+
 // Diff returns the diff for a resource given the schema map,
 // state, and configuration.
 func (m schemaMap) Diff(

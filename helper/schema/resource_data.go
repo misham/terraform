@@ -336,6 +336,21 @@ func (d *ResourceData) init() {
 	}
 }
 
+// setAllFrom copies all of the (non-computed!) values from the given source
+// into the "set" source, so that they will be returned on reads and
+// placed into any state created by State()
+func (d *ResourceData) setAllFrom(source getSource) {
+	for k := range d.schema {
+		raw := d.get([]string{k}, source)
+		if raw.Exists && !raw.Computed {
+			d.Set(k, raw.Value)
+			if raw.ValueProcessed != nil {
+				d.Set(k, raw.ValueProcessed)
+			}
+		}
+	}
+}
+
 func (d *ResourceData) diffChange(
 	k string) (interface{}, interface{}, bool, bool) {
 	// Get the change between the state and the config.

@@ -168,6 +168,29 @@ func (r *Resource) Validate(c *terraform.ResourceConfig) ([]string, []error) {
 	return schemaMap(r.Schema).Validate(c)
 }
 
+// ReadData loads the data for a read-only resource. This is a different
+// entry point into the Read function that is used for data sources.
+func (r *Resource) ReadData(
+	c *terraform.ResourceConfig,
+	meta interface{},
+) (*terraform.InstanceState, error) {
+
+	// For ReadData we disregard any existing state that might be present
+	// and just always start with the config.
+	data, err := schemaMap(r.Schema).ConfigData(c)
+	if err != nil {
+		return nil, err
+	}
+
+	err = r.Read(data, meta)
+	state := data.State()
+	if state != nil && state.ID == "" {
+		state = nil
+	}
+
+	return r.recordCurrentSchemaVersion(state), err
+}
+
 // Refresh refreshes the state of the resource.
 func (r *Resource) Refresh(
 	s *terraform.InstanceState,
