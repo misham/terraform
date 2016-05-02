@@ -586,10 +586,51 @@ func (n *graphNodeExpandedResource) managedResourceEvalNodes(resource *Resource,
 
 func (n *graphNodeExpandedResource) dataResourceEvalNodes(resource *Resource, info *InstanceInfo, resourceConfig *ResourceConfig) []EvalNode {
 	//var diff *InstanceDiff
-	//var provider ResourceProvider
-	//var state *InstanceState
+	var provider ResourceProvider
+	var state *InstanceState
+	var config *ResourceConfig
 
 	nodes := make([]EvalNode, 0, 5)
+
+	// Refresh the resource
+	nodes = append(nodes, &EvalOpFilter{
+		Ops: []walkOperation{walkRefresh},
+		Node: &EvalSequence{
+			Nodes: []EvalNode{
+				&EvalGetProvider{
+					Name:   n.ProvidedBy()[0],
+					Output: &provider,
+				},
+				&EvalInterpolate{
+					Config:   n.Resource.RawConfig.Copy(),
+					Resource: resource,
+					Output:   &config,
+				},
+				&EvalReadData{
+					Provider: &provider,
+					Output:   &state,
+					Config:   &config,
+					Info:     info,
+				},
+				&EvalWriteState{
+					Name:         n.stateId(),
+					ResourceType: n.Resource.Type,
+					Provider:     n.Resource.Provider,
+					Dependencies: n.StateDependencies(),
+					State:        &state,
+				},
+			},
+		},
+	})
+
+	// TODO: Diff should check if we have a state yet, and if not
+	// produce a creation diff for our resource that we can then
+	// process during Apply.
+
+	// TODO: Apply should check whether we have a creation diff,
+	// and if so repeat the same steps we would do during Refresh
+	// so that we'll populate our state before any of our dependencies
+	// need access to it.
 
 	return nodes
 }
