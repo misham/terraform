@@ -197,6 +197,12 @@ func resourceCLCServerRead(d *schema.ResourceData, meta interface{}) error {
 	d.Set("storage_type", s.Storagetype)
 	d.Set("created_date", s.ChangeInfo.CreatedDate)
 	d.Set("modified_date", s.ChangeInfo.ModifiedDate)
+
+	creds, err := client.Server.GetCredentials(d.Id())
+	if err != nil {
+		return err
+	}
+	d.Set("password", creds.Password)
 	return nil
 }
 
