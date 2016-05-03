@@ -117,9 +117,7 @@ resource "fastly_service_v1" "foo" {
     name = "some amz condition"
     type = "REQUEST"
 
-    statement = <<EOF
-req.url ~ "^/yolo/"
-EOF
+    statement = "req.url ~ \"^/yolo/\""
 
     priority = 10
   }

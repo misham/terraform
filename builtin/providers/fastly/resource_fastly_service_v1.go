@@ -68,12 +68,11 @@ func resourceServiceV1() *schema.Resource {
 							Type:        schema.TypeString,
 							Required:    true,
 							Description: "The statement used to determine if the condition is met",
-							// StateFunc: func(v interface{}) string {
-							// 	value := v.(string)
-							// 	log.Printf("\n***\n string: %s", value)
-							// 	log.Printf("\n***\n new string: %s\n***\n", strings.TrimSpace(value))
-							// 	return strings.TrimSpace(value)
-							// },
+							StateFunc: func(v interface{}) string {
+								value := v.(string)
+								// Trim newlines and spaces, to match Fastly API
+								return strings.TrimSpace(value)
+							},
 						},
 						"priority": &schema.Schema{
 							Type:        schema.TypeInt,
@@ -503,12 +502,12 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 
 		// Find difference in Conditions
 		if d.HasChange("condition") {
-			// POST new Conditions
-			// Note: we don't utilize the PUT endpoint to update a Backend, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
+			// Note: we don't utilize the PUT endpoint to update these objects, we simply
+			// destroy any that have changed, and create new ones with the updated
+			// values. This is how Terraform works with nested sub resources, we only
+			// get the full diff not a partial set item diff. Because this is done
+			// on a new version of the Fastly Service configuration, this is considered safe
+
 			oc, nc := d.GetChange("condition")
 			if oc == nil {
 				oc = new(schema.Set)
@@ -538,10 +537,9 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 				}
 			}
 
+			// POST new Conditions
 			for _, cRaw := range addConditions {
 				cf := cRaw.(map[string]interface{})
-				log.Printf("\n***\nStatement:\n%s\n***\n", cf["statement"].(string))
-				log.Printf("\n***\nStatement trimmed:\n%s\n***\n", strings.TrimSpace(cf["statement"].(string)))
 				opts := gofastly.CreateConditionInput{
 					Service: d.Id(),
 					Version: latestVersion,
@@ -549,7 +547,7 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 					Type:    cf["type"].(string),
 					// need to trim leading/tailing spaces, incase the config has HEREDOC
 					// formatting and contains a trailing new line
-					//Statement: strings.TrimSpace(cf["statement"].(string)),
+					Statement: strings.TrimSpace(cf["statement"].(string)),
 					Statement: cf["statement"].(string),
 					Priority:  cf["priority"].(int),
 				}
@@ -564,11 +562,6 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 
 		// Find differences in domains
 		if d.HasChange("domain") {
-			// Note: we don't utilize the PUT endpoint to update a Domain, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
 			od, nd := d.GetChange("domain")
 			if od == nil {
 				od = new(schema.Set)
@@ -622,12 +615,6 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 
 		// find difference in backends
 		if d.HasChange("backend") {
-			// POST new Backends
-			// Note: we don't utilize the PUT endpoint to update a Backend, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
 			ob, nb := d.GetChange("backend")
 			if ob == nil {
 				ob = new(schema.Set)
@@ -657,6 +644,7 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 				}
 			}
 
+			// Find and post new Backends
 			for _, dRaw := range addBackends {
 				df := dRaw.(map[string]interface{})
 				opts := gofastly.CreateBackendInput{
@@ -684,11 +672,6 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 		}
 
 		if d.HasChange("header") {
-			// Note: we don't utilize the PUT endpoint to update a Header, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
 			oh, nh := d.GetChange("header")
 			if oh == nil {
 				oh = new(schema.Set)
@@ -739,11 +722,6 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 
 		// Find differences in Gzips
 		if d.HasChange("gzip") {
-			// Note: we don't utilize the PUT endpoint to update a Gzip rule, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
 			og, ng := d.GetChange("gzip")
 			if og == nil {
 				og = new(schema.Set)
@@ -813,12 +791,6 @@ func resourceServiceV1Update(d *schema.ResourceData, meta interface{}) error {
 
 		// find difference in s3logging
 		if d.HasChange("s3logging") {
-			// POST new Logging
-			// Note: we don't utilize the PUT endpoint to update a S3 Logs, we simply
-			// destroy it and create a new one. This is how Terraform works with nested
-			// sub resources, we only get the full diff not a partial set item diff.
-			// Because this is done on a new version of the configuration, this is
-			// considered safe
 			os, ns := d.GetChange("s3logging")
 			if os == nil {
 				os = new(schema.Set)
